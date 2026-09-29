@@ -13,17 +13,19 @@ const reminders = computed(() =>
           name: '认证证书',
           expiresAt: project.certificateExpiry,
           status: project.status,
-          impact: `${project.configuration} 全部配置`
+          impact: project.configurations.join('、')
         },
-        ...project.evidence
-          .filter((evidence) => evidence.expiryDate)
-          .map((evidence) => ({
-            project,
-            name: evidence.name,
-            expiresAt: evidence.expiryDate!,
-            status: evidence.status,
-            impact: evidence.configurations.join('、')
-          }))
+        ...project.evidence.flatMap((evidence) =>
+          evidence.revisions
+            .filter((revision) => revision.expiryDate)
+            .map((revision) => ({
+              project,
+              name: `${revision.name}（${revision.version}）`,
+              expiresAt: revision.expiryDate!,
+              status: revision.status,
+              impact: revision.configurations.join('、')
+            }))
+        )
       ];
       return items;
     })

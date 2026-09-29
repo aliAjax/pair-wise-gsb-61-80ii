@@ -5,11 +5,11 @@ import { useCertificationStore } from '~/stores/certification';
 
 const store = useCertificationStore();
 const router = useRouter();
-const form = reactive<ProjectInput>({
+const form = reactive({
   name: '',
   modelCode: '',
   vehicleType: 'M1',
-  configuration: '',
+  configurations: ['长续航四驱版', '标准续航后驱版'],
   maintenanceVersion: '',
   softwareVersion: '',
   applicant: '',
@@ -30,11 +30,31 @@ const agencyOptions = [
   { label: '华北认证中心', value: '华北认证中心' }
 ];
 
+function addConfiguration() {
+  form.configurations.push('');
+}
+
+function removeConfiguration(index: number) {
+  if (form.configurations.length === 1) return;
+  form.configurations.splice(index, 1);
+}
+
 function submit() {
   submitted.value = true;
-  Object.assign(errors, validateProjectInput(form));
+  const input: ProjectInput = {
+    name: form.name,
+    modelCode: form.modelCode,
+    vehicleType: form.vehicleType,
+    configurations: form.configurations.map((item) => item.trim()).filter(Boolean),
+    maintenanceVersion: form.maintenanceVersion,
+    softwareVersion: form.softwareVersion,
+    applicant: form.applicant,
+    agency: form.agency,
+    certificateExpiry: form.certificateExpiry
+  };
+  Object.assign(errors, validateProjectInput(input));
   if (Object.keys(errors).length) return;
-  const id = store.createProject({ ...form });
+  const id = store.createProject(input);
   void router.push(`/projects/${id}`);
 }
 </script>
@@ -43,7 +63,7 @@ function submit() {
   <div class="mb-6">
     <NuxtLink to="/" class="text-sm text-teal-700 hover:underline">返回认证项目</NuxtLink>
     <h1 class="mt-3 text-2xl font-semibold">新建认证项目</h1>
-    <p class="mt-1 text-sm text-slate-600">建立车型、配置和版本基线，随后关联法规项目与证据文件。</p>
+    <p class="mt-1 text-sm text-slate-600">同一车型可同时申报多个配置，覆盖矩阵将按配置 × 必选法规逐格跟踪。</p>
   </div>
 
   <UCard>
@@ -57,9 +77,30 @@ function submit() {
       <UFormGroup label="车辆类别" required :error="submitted ? errors.vehicleType : undefined">
         <USelect v-model="form.vehicleType" :options="vehicleTypeOptions" />
       </UFormGroup>
-      <UFormGroup label="申报配置" required :error="submitted ? errors.configuration : undefined">
-        <UInput v-model="form.configuration" placeholder="例如：长续航四驱版" />
-      </UFormGroup>
+
+      <div class="md:col-span-2 xl:col-span-2">
+        <UFormGroup label="申报配置（可多个）" required :error="submitted ? errors.configurations : undefined">
+          <div class="space-y-2">
+            <div v-for="(_, index) in form.configurations" :key="index" class="flex gap-2">
+              <UInput
+                v-model="form.configurations[index]"
+                :placeholder="`配置 ${index + 1}，例如：高性能四驱版`"
+              />
+              <UButton
+                color="red"
+                variant="ghost"
+                icon="i-heroicons-trash"
+                :disabled="form.configurations.length === 1"
+                @click="removeConfiguration(index)"
+              />
+            </div>
+            <UButton size="xs" color="primary" variant="soft" icon="i-heroicons-plus" @click="addConfiguration">
+              增加申报配置
+            </UButton>
+          </div>
+        </UFormGroup>
+      </div>
+
       <UFormGroup label="维护版本" required :error="submitted ? errors.maintenanceVersion : undefined">
         <UInput v-model="form.maintenanceVersion" placeholder="MY28.0" />
       </UFormGroup>
@@ -77,7 +118,7 @@ function submit() {
       </UFormGroup>
 
       <div class="md:col-span-2 xl:col-span-3">
-        <UButton type="submit" color="primary">建立项目并进入编辑器</UButton>
+        <UButton type="submit" color="primary">建立项目并进入覆盖矩阵</UButton>
       </div>
     </form>
   </UCard>

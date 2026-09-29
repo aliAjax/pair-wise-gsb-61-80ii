@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useQuery, useQueryClient } from '@tanstack/vue-query';
 import { certificationApi } from '~/services/certification-api';
-import type { ProjectFilters, ProjectStatus } from '~/types/certification';
+import { buildCoverageMatrix } from '~/services/coverage';
+import type { ProjectFilters } from '~/types/certification';
 import { useCertificationStore } from '~/stores/certification';
 
 const store = useCertificationStore();
@@ -26,8 +27,8 @@ const statusOptions = [
 const riskOptions = [
   { label: '全部关注项', value: 'all' },
   { label: '证书临近到期', value: 'expiring' },
-  { label: '法规覆盖缺失', value: 'missing' },
-  { label: '软件版本冲突', value: 'version_conflict' }
+  { label: '法规覆盖待补', value: 'missing' },
+  { label: '版本过期单元格', value: 'version_conflict' }
 ];
 
 const agencyOptions = computed(() => [
@@ -43,20 +44,23 @@ const { data, isPending, isError, refetch } = useQuery({
 const projectRows = computed(() => data.value ?? []);
 const openCount = computed(() => store.projects.filter((project) => !['approved', 'rejected'].includes(project.status)).length);
 const supplementCount = computed(() => store.projects.filter((project) => project.status === 'supplement_required').length);
-const versionConflictCount = computed(() =>
-  store.projects.filter((project) =>
-    project.evidence.some((evidence) => evidence.softwareVersion !== project.softwareVersion)
-  ).length
+const versionConflictCount = computed(
+  () => store.projects.filter((project) => buildCoverageMatrix(project).staleCells.length > 0).length
 );
 const expiringCount = computed(() =>
   store.projects.filter((project) => new Date(project.certificateExpiry) <= new Date('2026-12-31')).length
 );
 
+function projectMatrix(project: (typeof projectRows.value)[number]) {
+  return buildCoverageMatrix(project);
+}
+
 function riskLabel(project: (typeof projectRows.value)[number]) {
-  if (project.evidence.some((item) => item.softwareVersion !== project.softwareVersion)) return '软件版本冲突';
-  if (project.regulations.some((item) => item.status !== 'complete')) return '法规覆盖缺失';
+  const matrix = projectMatrix(project);
+  if (matrix.staleCells.length) return `${matrix.staleCells.length} 个单元格版本过期`;
+  if (matrix.pendingCells.length) return `${matrix.pendingCells.length} 个单元格待补`;
   if (new Date(project.certificateExpiry) <= new Date('2026-12-31')) return '证书临近到期';
-  return '未见阻断项';
+  return '覆盖完整';
 }
 
 async function invalidateAndRefetch() {
@@ -75,7 +79,7 @@ onMounted(() => {
     <div>
       <p class="text-sm font-medium text-teal-700">型式认证运营</p>
       <h1 class="mt-1 text-2xl font-semibold">认证证据包工作台</h1>
-      <p class="mt-2 text-sm text-slate-600">按车型、配置、法规项目和维护版本组织证据，控制缺失、错配与补件闭环。</p>
+      <p class="mt-2 text-sm text-slate-600">按车型、多配置、法规项目和软件基线组织证据矩阵，控制待补、版本过期与补件闭环。</p>
     </div>
     <UButton to="/projects/new" color="primary" icon="i-heroicons-plus">新建认证项目</UButton>
   </div>
@@ -88,7 +92,7 @@ onMounted(() => {
       <StatTile label="待补件项目" :value="supplementCount" note="认证机构已退回要求补件" />
     </div>
     <div class="col-span-12 sm:col-span-6 xl:col-span-3">
-      <StatTile label="版本冲突" :value="versionConflictCount" note="证据软件版本与申报基线不一致" />
+      <StatTile label="版本过期" :value="versionConflictCount" note="基线变化后存在 stale 覆盖单元格" />
     </div>
     <div class="col-span-12 sm:col-span-6 xl:col-span-3">
       <StatTile label="90 天内到期" :value="expiringCount" note="证书或批准文件临近失效" />
@@ -121,14 +125,14 @@ onMounted(() => {
     <div v-if="isPending" class="p-10 text-center text-slate-500">正在读取认证项目索引…</div>
     <div v-else-if="isError" class="p-10 text-center text-red-700">认证项目索引读取失败。</div>
     <div v-else class="overflow-x-auto">
-      <table class="data-table min-w-[1120px]">
+      <table class="data-table min-w-[1180px]">
         <thead>
           <tr>
             <th>认证项目</th>
-            <th>车型 / 配置</th>
+            <th>车型 / 申报配置</th>
             <th>版本基线</th>
             <th>状态</th>
-            <th>完整性</th>
+            <th>矩阵覆盖</th>
             <th>关键风险</th>
             <th>机构 / 审阅人</th>
             <th>操作</th>
@@ -144,25 +148,31 @@ onMounted(() => {
             </td>
             <td>
               <p class="font-medium">{{ project.modelCode }} · {{ project.vehicleType }}</p>
-              <p class="mt-1 text-sm text-slate-500">{{ project.configuration }}</p>
+              <p class="mt-1 text-sm text-slate-500">{{ project.configurations.join('、') }}</p>
             </td>
             <td>
               <p>{{ project.maintenanceVersion }}</p>
               <p class="mt-1 font-mono text-xs text-slate-500">SW {{ project.softwareVersion }}</p>
             </td>
             <td><StatusBadge :status="project.status" /></td>
-            <td class="min-w-[150px]">
+            <td class="min-w-[170px]">
               <div class="flex items-center gap-3">
-                <UProgress :value="project.progress" size="xs" class="min-w-[80px]" />
-                <span class="metric-value text-sm">{{ project.progress }}%</span>
+                <UProgress :value="projectMatrix(project).coveragePercent" size="xs" class="min-w-[80px]" />
+                <span class="metric-value text-sm">
+                  {{ projectMatrix(project).acceptedRequiredCount }}/{{ projectMatrix(project).requiredCount }}
+                </span>
               </div>
+              <p class="mt-1 text-[11px] text-slate-500">
+                <span class="text-amber-700">{{ projectMatrix(project).pendingCells.length }} 待补</span> ·
+                <span class="text-red-700"> {{ projectMatrix(project).staleCells.length }} 过期</span>
+              </p>
             </td>
             <td class="text-sm">{{ riskLabel(project) }}</td>
             <td>
               <p>{{ project.agency }}</p>
               <p class="mt-1 text-xs text-slate-500">{{ project.reviewer }}</p>
             </td>
-            <td><UButton size="xs" color="primary" variant="soft" :to="`/projects/${project.id}`">打开审阅</UButton></td>
+            <td><UButton size="xs" color="primary" variant="soft" :to="`/projects/${project.id}`">打开矩阵</UButton></td>
           </tr>
           <tr v-if="!projectRows.length">
             <td colspan="8" class="py-12 text-center text-slate-500">没有符合当前条件的认证项目。</td>

@@ -30,10 +30,12 @@ function exportAudit() {
       .map((project) => ({
         id: project.id,
         status: project.status,
+        configurations: project.configurations,
         maintenanceVersion: project.maintenanceVersion,
         softwareVersion: project.softwareVersion,
         versions: project.versions,
         evidence: project.evidence,
+        coverage: project.coverage,
         audit: project.audit
       }))
   };
@@ -75,6 +77,19 @@ function exportAudit() {
           <span class="text-xs text-slate-500">{{ entry.createdAt.slice(0, 16).replace('T', ' ') }}</span>
         </div>
         <p class="mt-1 text-sm text-slate-600">{{ entry.detail }}</p>
+        <div v-if="entry.coverageChanges?.length" class="mt-2 flex flex-wrap gap-2">
+          <UBadge
+            v-for="change in entry.coverageChanges"
+            :key="`${entry.id}-${change.regulationId}-${change.configuration}-${change.from}-${change.to}`"
+            :color="change.to === 'accepted' ? 'green' : change.to === 'stale' ? 'red' : 'amber'"
+            variant="soft"
+          >
+            {{ change.regulationCode ?? change.regulationId }} × {{ change.configuration }}：
+            {{ change.from === 'accepted' ? '已接受' : change.from === 'stale' ? '版本过期' : '待补' }}
+            →
+            {{ change.to === 'accepted' ? '已接受' : change.to === 'stale' ? '版本过期' : '待补' }}
+          </UBadge>
+        </div>
         <p class="mt-1 text-xs text-slate-500">{{ entry.projectId }} · {{ entry.projectName }}</p>
       </article>
       <p v-if="!entries.length" class="py-10 text-center text-sm text-slate-500">没有符合条件的审计记录。</p>
