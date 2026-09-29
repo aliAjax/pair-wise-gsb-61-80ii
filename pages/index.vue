@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useQuery, useQueryClient } from '@tanstack/vue-query';
 import { certificationApi } from '~/services/certification-api';
-import type { ProjectFilters, ProjectStatus } from '~/types/certification';
+import { buildCoverageMatrix } from '~/services/coverage-matrix';
+import type { ProjectFilters } from '~/types/certification';
 import { useCertificationStore } from '~/stores/certification';
 
 const store = useCertificationStore();
@@ -27,7 +28,7 @@ const riskOptions = [
   { label: '全部关注项', value: 'all' },
   { label: '证书临近到期', value: 'expiring' },
   { label: '法规覆盖缺失', value: 'missing' },
-  { label: '软件版本冲突', value: 'version_conflict' }
+  { label: '软件版本过期', value: 'version_conflict' }
 ];
 
 const agencyOptions = computed(() => [
@@ -45,18 +46,29 @@ const openCount = computed(() => store.projects.filter((project) => !['approved'
 const supplementCount = computed(() => store.projects.filter((project) => project.status === 'supplement_required').length);
 const versionConflictCount = computed(() =>
   store.projects.filter((project) =>
-    project.evidence.some((evidence) => evidence.softwareVersion !== project.softwareVersion)
+    buildCoverageMatrix(project)
+      .filter((row) => row.regulation.required)
+      .some((row) => row.cells.some((cell) => cell.status === 'outdated'))
   ).length
 );
 const expiringCount = computed(() =>
   store.projects.filter((project) => new Date(project.certificateExpiry) <= new Date('2026-12-31')).length
 );
 
+function coverageStats(project: (typeof projectRows.value)[number]) {
+  const rows = buildCoverageMatrix(project).filter((row) => row.regulation.required);
+  return {
+    outdated: rows.some((row) => row.cells.some((cell) => cell.status === 'outdated')),
+    gap: rows.some((row) => row.status !== 'complete')
+  };
+}
+
 function riskLabel(project: (typeof projectRows.value)[number]) {
-  if (project.evidence.some((item) => item.softwareVersion !== project.softwareVersion)) return '软件版本冲突';
-  if (project.regulations.some((item) => item.status !== 'complete')) return '法规覆盖缺失';
+  const stats = coverageStats(project);
+  if (stats.outdated) return '软件版本过期（需重新测试）';
+  if (stats.gap) return '法规×配置覆盖缺口';
   if (new Date(project.certificateExpiry) <= new Date('2026-12-31')) return '证书临近到期';
-  return '未见阻断项';
+  return '全部单元格已接受';
 }
 
 async function invalidateAndRefetch() {
@@ -88,7 +100,7 @@ onMounted(() => {
       <StatTile label="待补件项目" :value="supplementCount" note="认证机构已退回要求补件" />
     </div>
     <div class="col-span-12 sm:col-span-6 xl:col-span-3">
-      <StatTile label="版本冲突" :value="versionConflictCount" note="证据软件版本与申报基线不一致" />
+      <StatTile label="版本过期" :value="versionConflictCount" note="已接受单元格的证据落后于当前软件基线" />
     </div>
     <div class="col-span-12 sm:col-span-6 xl:col-span-3">
       <StatTile label="90 天内到期" :value="expiringCount" note="证书或批准文件临近失效" />
@@ -144,7 +156,7 @@ onMounted(() => {
             </td>
             <td>
               <p class="font-medium">{{ project.modelCode }} · {{ project.vehicleType }}</p>
-              <p class="mt-1 text-sm text-slate-500">{{ project.configuration }}</p>
+              <p class="mt-1 text-sm text-slate-500">{{ project.configurations.join('、') }}</p>
             </td>
             <td>
               <p>{{ project.maintenanceVersion }}</p>

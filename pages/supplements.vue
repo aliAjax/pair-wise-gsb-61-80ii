@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { validateEvidenceUpgrade } from '~/services/validators';
+import { activeEvidence } from '~/services/coverage-matrix';
 import { useCertificationStore } from '~/stores/certification';
 
 const store = useCertificationStore();
@@ -9,9 +10,18 @@ const note = ref('');
 const message = ref('');
 const error = ref('');
 
+/** 待补件：被退回 / 待审，或已接受但软件版本落后（版本过期） */
+function needsSupplement(current: ReturnType<typeof useCertificationStore>['projects'][number]) {
+  return activeEvidence(current).filter(
+    (item) =>
+      ['rejected', 'resubmit', 'missing', 'submitted'].includes(item.status) ||
+      (item.status === 'accepted' && item.softwareVersion !== current.softwareVersion)
+  );
+}
+
 const projectOptions = computed(() =>
   store.projects
-    .filter((project) => project.evidence.some((evidence) => ['rejected', 'resubmit', 'missing'].includes(evidence.status)))
+    .filter((project) => needsSupplement(project).length)
     .map((project) => ({
       label: `${project.id} · ${project.name}`,
       value: project.id
@@ -19,9 +29,7 @@ const projectOptions = computed(() =>
 );
 
 const current = computed(() => store.projects.find((project) => project.id === selectedProjectId.value));
-const pendingEvidence = computed(
-  () => current.value?.evidence.filter((item) => ['rejected', 'resubmit', 'missing'].includes(item.status)) ?? []
-);
+const pendingEvidence = computed(() => (current.value ? needsSupplement(current.value) : []));
 
 function submit() {
   message.value = '';
@@ -35,10 +43,10 @@ function submit() {
     error.value = errors.join('；');
     return;
   }
-  const count = store.bulkSupplement(current.value.id, selectedEvidence.value, note.value);
+  const { count } = store.bulkSupplement(current.value.id, selectedEvidence.value, note.value);
   selectedEvidence.value = [];
   note.value = '';
-  message.value = `已完成 ${count} 项证据补件，并同步到项目版本基线。`;
+  message.value = `已为 ${count} 项证据生成新修订并提交至当前基线 SW ${current.value.softwareVersion}，旧报告留档，等待审阅人重新接受。`;
 }
 
 onMounted(() => {
@@ -50,7 +58,7 @@ onMounted(() => {
 <template>
   <div class="mb-6">
     <h1 class="text-2xl font-semibold">批量补件工作区</h1>
-    <p class="mt-1 text-sm text-slate-600">将退回项统一更新到当前软件基线，并记录补件范围和影响配置。</p>
+    <p class="mt-1 text-sm text-slate-600">补件生成新修订（不覆盖旧报告），并按法规×配置记录覆盖变化。</p>
   </div>
 
   <div v-if="message" class="mb-4 border border-green-200 bg-green-50 p-3 text-sm text-green-900">{{ message }}</div>
@@ -63,8 +71,8 @@ onMounted(() => {
       </UFormGroup>
       <div v-if="current" class="mt-5 space-y-3 text-sm">
         <div>
-          <p class="text-slate-500">车型配置</p>
-          <p class="mt-1 font-medium">{{ current.modelCode }} · {{ current.configuration }}</p>
+          <p class="text-slate-500">申报配置</p>
+          <p class="mt-1 font-medium">{{ current.modelCode }} · {{ current.configurations.join('、') }}</p>
         </div>
         <div>
           <p class="text-slate-500">当前版本基线</p>
@@ -80,7 +88,7 @@ onMounted(() => {
     <section class="border border-slate-200 bg-white">
       <div class="border-b border-slate-200 px-4 py-3">
         <h2 class="font-semibold">选择待补件证据</h2>
-        <p class="mt-1 text-xs text-slate-500">提交后证据状态变为已提交，软件版本自动更新为项目基线。</p>
+        <p class="mt-1 text-xs text-slate-500">提交后生成新修订（文件版本号递增、软件对齐基线），旧修订原样留档，状态回到“已提交”等待审阅。</p>
       </div>
       <form class="p-4" @submit.prevent="submit">
         <div class="space-y-3">
@@ -88,8 +96,8 @@ onMounted(() => {
             <input v-model="selectedEvidence" type="checkbox" :value="item.id" class="mt-1" />
             <span class="min-w-0 flex-1">
               <span class="flex flex-wrap items-center justify-between gap-2">
-                <strong class="text-sm">{{ item.name }}</strong>
-                <StatusBadge :status="item.status" />
+                <strong class="text-sm">{{ item.name }} <span class="font-mono text-xs text-slate-400">R{{ item.revision }}</span></strong>
+                <StatusBadge :status="item.softwareVersion !== current?.softwareVersion ? 'outdated' : item.status" />
               </span>
               <span class="mt-2 block text-sm text-slate-600">{{ item.note }}</span>
               <span class="mt-2 block text-xs text-slate-500">
@@ -102,10 +110,10 @@ onMounted(() => {
 
         <div class="mt-5">
           <UFormGroup label="批量补件说明">
-            <UTextarea v-model="note" :rows="4" placeholder="填写新增测试、说明文件、版本核对和配置覆盖结论" />
+            <UTextarea v-model="note" :rows="4" placeholder="填写重新测试结果、新增配置覆盖、版本核对结论" />
           </UFormGroup>
         </div>
-        <UButton type="submit" color="primary" class="mt-4">提交批量补件</UButton>
+        <UButton type="submit" color="primary" class="mt-4">生成新修订并提交</UButton>
       </form>
     </section>
   </div>

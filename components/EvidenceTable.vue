@@ -4,6 +4,8 @@ import type { EvidenceItem, EvidenceStatus } from '~/types/certification';
 const props = defineProps<{
   evidence: EvidenceItem[];
   editable?: boolean;
+  /** 当前项目软件基线，用于高亮版本过期 */
+  baseline?: string;
 }>();
 
 const emit = defineEmits<{
@@ -21,7 +23,7 @@ const typeLabels: Record<EvidenceItem['type'], string> = {
 
 <template>
   <div class="overflow-x-auto">
-    <table class="data-table min-w-[980px]">
+    <table class="data-table min-w-[1040px]">
       <thead>
         <tr>
           <th>证据文件</th>
@@ -34,23 +36,34 @@ const typeLabels: Record<EvidenceItem['type'], string> = {
         </tr>
       </thead>
       <tbody>
-        <tr v-for="item in evidence" :key="item.id">
+        <tr v-for="item in evidence" :key="item.id" :class="item.supersededBy ? 'opacity-60' : ''">
           <td>
-            <p class="font-medium">{{ item.name }}</p>
-            <p class="mt-1 text-xs text-slate-500">{{ typeLabels[item.type] }} · {{ item.id }}</p>
+            <p class="font-medium">
+              {{ item.name }}
+              <span class="ml-1 font-mono text-xs text-slate-400">R{{ item.revision }}</span>
+            </p>
+            <p class="mt-1 text-xs text-slate-500">
+              {{ typeLabels[item.type] }} · {{ item.id }}
+              <span v-if="item.supersededBy" class="ml-1 text-slate-400">（已被补件修订取代，历史留档）</span>
+            </p>
           </td>
           <td class="font-mono text-sm">{{ item.regulationId }}</td>
           <td>
             <p>文件 {{ item.version }}</p>
-            <p class="mt-1 text-xs" :class="item.softwareVersion !== item.softwareVersion ? 'text-red-700' : 'text-slate-500'">
+            <p
+              class="mt-1 text-xs"
+              :class="baseline && item.softwareVersion !== baseline ? 'font-medium text-red-700' : 'text-slate-500'"
+            >
               软件 {{ item.softwareVersion }}
+              <span v-if="baseline && item.softwareVersion !== baseline">（基线 {{ baseline }}，版本过期）</span>
             </p>
           </td>
           <td class="max-w-[260px] text-sm">{{ item.configurations.join('、') }}</td>
           <td><StatusBadge :status="item.status" /></td>
           <td class="max-w-[320px] text-sm text-slate-600">{{ item.note }}</td>
           <td v-if="editable">
-            <div class="flex min-w-[180px] flex-wrap gap-2">
+            <div v-if="item.supersededBy" class="text-xs text-slate-400">—</div>
+            <div v-else class="flex min-w-[180px] flex-wrap gap-2">
               <UButton size="xs" color="green" variant="soft" @click="emit('update', item.id, 'accepted')">接受</UButton>
               <UButton size="xs" color="red" variant="soft" @click="emit('update', item.id, 'rejected')">拒绝</UButton>
               <UButton size="xs" color="amber" variant="soft" @click="emit('update', item.id, 'resubmit')">重新抽样</UButton>

@@ -21,8 +21,7 @@ const entries = computed(() =>
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 );
 
-function exportAudit() {
-  const payload = {
+function exportAudit() {  const payload = {
     generatedAt: new Date().toISOString(),
     scope: selectedProject.value,
     projects: store.projects
@@ -30,6 +29,7 @@ function exportAudit() {
       .map((project) => ({
         id: project.id,
         status: project.status,
+        configurations: project.configurations,
         maintenanceVersion: project.maintenanceVersion,
         softwareVersion: project.softwareVersion,
         versions: project.versions,

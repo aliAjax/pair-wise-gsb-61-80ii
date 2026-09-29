@@ -5,11 +5,11 @@ import { useCertificationStore } from '~/stores/certification';
 
 const store = useCertificationStore();
 const router = useRouter();
-const form = reactive<ProjectInput>({
+const form = reactive({
   name: '',
   modelCode: '',
   vehicleType: 'M1',
-  configuration: '',
+  configurationText: '',
   maintenanceVersion: '',
   softwareVersion: '',
   applicant: '',
@@ -30,11 +30,26 @@ const agencyOptions = [
   { label: '华北认证中心', value: '华北认证中心' }
 ];
 
+function buildInput(): ProjectInput {
+  return {
+    name: form.name,
+    modelCode: form.modelCode,
+    vehicleType: form.vehicleType,
+    configurations: form.configurationText.split('\n').map((item) => item.trim()).filter(Boolean),
+    maintenanceVersion: form.maintenanceVersion,
+    softwareVersion: form.softwareVersion,
+    applicant: form.applicant,
+    agency: form.agency,
+    certificateExpiry: form.certificateExpiry
+  };
+}
+
 function submit() {
   submitted.value = true;
-  Object.assign(errors, validateProjectInput(form));
+  Object.keys(errors).forEach((key) => delete errors[key as keyof ProjectInput]);
+  Object.assign(errors, validateProjectInput(buildInput()));
   if (Object.keys(errors).length) return;
-  const id = store.createProject({ ...form });
+  const id = store.createProject(buildInput());
   void router.push(`/projects/${id}`);
 }
 </script>
@@ -43,7 +58,7 @@ function submit() {
   <div class="mb-6">
     <NuxtLink to="/" class="text-sm text-teal-700 hover:underline">返回认证项目</NuxtLink>
     <h1 class="mt-3 text-2xl font-semibold">新建认证项目</h1>
-    <p class="mt-1 text-sm text-slate-600">建立车型、配置和版本基线，随后关联法规项目与证据文件。</p>
+    <p class="mt-1 text-sm text-slate-600">一次录入全部申报配置、版本基线，随后按法规 × 配置建立覆盖矩阵。</p>
   </div>
 
   <UCard>
@@ -57,8 +72,14 @@ function submit() {
       <UFormGroup label="车辆类别" required :error="submitted ? errors.vehicleType : undefined">
         <USelect v-model="form.vehicleType" :options="vehicleTypeOptions" />
       </UFormGroup>
-      <UFormGroup label="申报配置" required :error="submitted ? errors.configuration : undefined">
-        <UInput v-model="form.configuration" placeholder="例如：长续航四驱版" />
+      <UFormGroup
+        label="申报配置（每行一个）"
+        required
+        class="md:col-span-2 xl:col-span-3"
+        :error="submitted ? errors.configurations : undefined"
+        :help="'多配置同时申报时逐行填写，覆盖矩阵将为每个配置生成独立单元格'"
+      >
+        <UTextarea v-model="form.configurationText" :rows="3" placeholder="长续航四驱版&#10;标准续航后驱版" />
       </UFormGroup>
       <UFormGroup label="维护版本" required :error="submitted ? errors.maintenanceVersion : undefined">
         <UInput v-model="form.maintenanceVersion" placeholder="MY28.0" />

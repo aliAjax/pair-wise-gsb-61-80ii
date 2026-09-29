@@ -1,23 +1,25 @@
 <script setup lang="ts">
-import type { EvidenceStatus, ProjectStatus } from '~/types/certification';
+import type { CoverageCellStatus, EvidenceStatus, ProjectStatus } from '~/types/certification';
 
 defineProps<{
-  status: ProjectStatus | EvidenceStatus;
+  status: ProjectStatus | EvidenceStatus | CoverageCellStatus;
 }>();
 
-const labels: Record<ProjectStatus | EvidenceStatus, string> = {
+const labels: Record<ProjectStatus | EvidenceStatus | CoverageCellStatus, string> = {
   draft: '草稿',
   submitted: '已提交',
   under_review: '审阅中',
   supplement_required: '待补件',
   approved: '已批准',
   rejected: '已拒绝',
-  missing: '缺失',
+  missing: '未覆盖',
   accepted: '已接受',
-  resubmit: '需重交'
+  resubmit: '需重交',
+  pending: '待补',
+  outdated: '版本过期'
 };
 
-const colors: Record<ProjectStatus | EvidenceStatus, 'gray' | 'blue' | 'amber' | 'green' | 'red'> = {
+const colors: Record<ProjectStatus | EvidenceStatus | CoverageCellStatus, 'gray' | 'blue' | 'amber' | 'green' | 'red'> = {
   draft: 'gray',
   submitted: 'blue',
   under_review: 'blue',
@@ -26,7 +28,9 @@ const colors: Record<ProjectStatus | EvidenceStatus, 'gray' | 'blue' | 'amber' |
   rejected: 'red',
   missing: 'gray',
   accepted: 'green',
-  resubmit: 'amber'
+  resubmit: 'amber',
+  pending: 'amber',
+  outdated: 'red'
 };
 </script>
 

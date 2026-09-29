@@ -1,5 +1,6 @@
 import { ofetch } from 'ofetch';
 import type { ApprovalProject, ProjectFilters } from '~/types/certification';
+import { buildCoverageMatrix } from './coverage-matrix';
 import { mockFetch } from './mock-fetch';
 
 const client = ofetch.create({
@@ -13,19 +14,21 @@ function matches(project: ApprovalProject, filters: ProjectFilters) {
   const query = filters.query.trim().toLowerCase();
   const matchesQuery =
     !query ||
-    [project.id, project.name, project.modelCode, project.configuration, project.softwareVersion]
+    [project.id, project.name, project.modelCode, project.configurations.join(' '), project.softwareVersion]
       .join(' ')
       .toLowerCase()
       .includes(query);
   const matchesStatus = filters.status === 'all' || project.status === filters.status;
   const matchesAgency = filters.agency === 'all' || project.agency === filters.agency;
+
+  const matrix = buildCoverageMatrix(project).filter((row) => row.regulation.required);
+  const hasOutdated = matrix.some((row) => row.cells.some((cell) => cell.status === 'outdated'));
+  const hasGap = matrix.some((row) => row.status !== 'complete');
   const matchesRisk =
     filters.risk === 'all' ||
     (filters.risk === 'expiring' && new Date(project.certificateExpiry) <= new Date('2026-12-31')) ||
-    (filters.risk === 'missing' &&
-      project.regulations.some((item) => item.status === 'missing' || item.status === 'conflict')) ||
-    (filters.risk === 'version_conflict' &&
-      project.evidence.some((item) => item.softwareVersion !== project.softwareVersion));
+    (filters.risk === 'missing' && hasGap) ||
+    (filters.risk === 'version_conflict' && hasOutdated);
 
   return matchesQuery && matchesStatus && matchesAgency && matchesRisk;
 }

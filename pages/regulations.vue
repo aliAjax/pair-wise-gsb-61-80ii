@@ -14,13 +14,15 @@ const visible = computed(() =>
 );
 const selectedProject = computed(() => store.projectById(selectedProjectId.value));
 const projectOptions = computed(() => store.projects.map((project) => ({ label: `${project.id} · ${project.name}`, value: project.id })));
+
+onMounted(() => store.hydrate());
 </script>
 
 <template>
   <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
     <div>
-      <h1 class="text-2xl font-semibold">法规项目树</h1>
-      <p class="mt-1 text-sm text-slate-600">按安全、环保、能耗、软件和部件分类查看证据覆盖与配置完整性。</p>
+      <h1 class="text-2xl font-semibold">法规覆盖矩阵</h1>
+      <p class="mt-1 text-sm text-slate-600">按法规 × 申报配置查看已接受、待补、版本过期与未覆盖。</p>
     </div>
     <div class="min-w-[320px]">
       <UFormGroup label="查看认证项目">
@@ -42,10 +44,10 @@ const projectOptions = computed(() => store.projects.map((project) => ({ label: 
     </UButton>
   </div>
 
-  <RegulationTree
+  <CoverageMatrix
     v-if="selectedProject"
+    :project="selectedProject"
     :regulations="visible"
-    :evidence="selectedProject.evidence"
   />
   <div v-else class="border border-red-200 bg-red-50 p-6 text-red-900">未找到所选认证项目。</div>
 </template>

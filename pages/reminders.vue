@@ -13,7 +13,7 @@ const reminders = computed(() =>
           name: '认证证书',
           expiresAt: project.certificateExpiry,
           status: project.status,
-          impact: `${project.configuration} 全部配置`
+          impact: `${project.configurations.join('、')} 全部配置`
         },
         ...project.evidence
           .filter((evidence) => evidence.expiryDate)
